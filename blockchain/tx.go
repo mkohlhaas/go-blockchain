@@ -6,9 +6,13 @@ import (
 	"github.com/mkohlhaas/golang-blockchain/wallet"
 )
 
+// Script stack (input on top of output):
+// Signature Script (from input)
+// Pubkey    Script (from output)
+
 type TxOutput struct {
 	Value      int
-	PubKeyHash []byte
+	PubKeyHash []byte // = Pubkey Script in real Bitcoin
 }
 type TxOutputs struct {
 	Outputs []TxOutput
@@ -16,7 +20,7 @@ type TxOutputs struct {
 type TxInput struct {
 	ID        []byte
 	Out       int
-	Signature []byte
+	Signature []byte // = Signature Script in real Bitcoin
 	PubKey    []byte
 }
 

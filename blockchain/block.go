@@ -25,10 +25,14 @@ func (b *Block) HashTransactions() []byte {
 	return tree.RootNode.Data
 }
 func CreateBlock(txs []*Transaction, prevHash []byte, height int) *Block {
-	block := &Block{time.Now().Unix(), []byte{}, txs, prevHash, 0, height}
+	block := &Block{
+		Timestamp:    time.Now().Unix(),
+		Transactions: txs,
+		PrevHash:     prevHash,
+		Height:       height}
 	pow := NewProof(block)
 	nonce, hash := pow.Run()
-	block.Hash = hash[:]
+	block.Hash = hash
 	block.Nonce = nonce
 	return block
 }

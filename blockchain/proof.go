@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"math/big"
+	"strconv"
 )
 
 // Take the data from the block
@@ -26,12 +27,12 @@ type ProofOfWork struct {
 func NewProof(b *Block) *ProofOfWork {
 	target := big.NewInt(1)
 	target.Lsh(target, uint(256-Difficulty))
-	pow := &ProofOfWork{b, target}
-	return pow
+	return &ProofOfWork{b, target}
 }
 func (pow *ProofOfWork) InitData(nonce int) []byte {
 	data := bytes.Join(
 		[][]byte{
+      []byte(strconv.FormatInt(pow.Block.Timestamp, 10)),
 			pow.Block.PrevHash,
 			pow.Block.HashTransactions(),
 			ToHex(int64(nonce)),
@@ -47,7 +48,7 @@ func (pow *ProofOfWork) Run() (int, []byte) {
 	nonce := 0
 	for nonce < math.MaxInt64 {
 		data := pow.InitData(nonce)
-		hash = sha256.Sum256(data)
+		hash = sha256.Sum256(data) // changes because nonce changes
 		fmt.Printf("\r%x", hash)
 		intHash.SetBytes(hash[:])
 		if intHash.Cmp(pow.Target) == -1 {

@@ -84,19 +84,6 @@ func RequestBlocks() {
 		SendGetBlocks(node)
 	}
 }
-func SendAddr(address string) {
-	nodes := Addr{KnownNodes}
-	nodes.AddrList = append(nodes.AddrList, nodeAddress)
-	payload := GobEncode(nodes)
-	request := append(CmdToBytes("addr"), payload...)
-	SendData(address, request)
-}
-func SendBlock(addr string, b *blockchain.Block) {
-	data := Block{nodeAddress, b.Serialize()}
-	payload := GobEncode(data)
-	request := append(CmdToBytes("block"), payload...)
-	SendData(addr, request)
-}
 func SendData(addr string, data []byte) {
 	conn, err := net.Dial(protocol, addr)
 	if err != nil {
@@ -115,6 +102,28 @@ func SendData(addr string, data []byte) {
 	if err != nil {
 		log.Panic(err)
 	}
+}
+func GobEncode(data interface{}) []byte {
+	var buff bytes.Buffer
+	enc := gob.NewEncoder(&buff)
+	err := enc.Encode(data)
+	if err != nil {
+		log.Panic(err)
+	}
+	return buff.Bytes()
+}
+func SendAddr(address string) {
+	nodes := Addr{KnownNodes}
+	nodes.AddrList = append(nodes.AddrList, nodeAddress)
+	payload := GobEncode(nodes)
+	request := append(CmdToBytes("addr"), payload...)
+	SendData(address, request)
+}
+func SendBlock(addr string, b *blockchain.Block) {
+	data := Block{nodeAddress, b.Serialize()}
+	payload := GobEncode(data)
+	request := append(CmdToBytes("block"), payload...)
+	SendData(addr, request)
 }
 func SendInv(address, kind string, items [][]byte) {
 	inventory := Inv{nodeAddress, kind, items}
@@ -176,7 +185,7 @@ func HandleBlock(request []byte, chain *blockchain.BlockChain) {
 		SendGetData(payload.AddrFrom, "block", blockHash)
 		blocksInTransit = blocksInTransit[1:]
 	} else {
-		UTXOSet := blockchain.UTXOSet{chain}
+		UTXOSet := blockchain.UTXOSet{Blockchain: chain}
 		UTXOSet.Reindex()
 	}
 }
@@ -284,7 +293,7 @@ func MineTx(chain *blockchain.BlockChain) {
 	cbTx := blockchain.CoinbaseTx(mineAddress, "")
 	txs = append(txs, cbTx)
 	newBlock := chain.MineBlock(txs)
-	UTXOSet := blockchain.UTXOSet{chain}
+	UTXOSet := blockchain.UTXOSet{Blockchain: chain}
 	UTXOSet.Reindex()
 	fmt.Println("New Block mined")
 	for _, tx := range txs {
@@ -299,6 +308,14 @@ func MineTx(chain *blockchain.BlockChain) {
 	if len(memoryPool) > 0 {
 		MineTx(chain)
 	}
+}
+func NodeIsKnown(addr string) bool {
+	for _, node := range KnownNodes {
+		if node == addr {
+			return true
+		}
+	}
+	return false
 }
 func HandleVersion(request []byte, chain *blockchain.BlockChain) {
 	var buff bytes.Buffer
@@ -347,6 +364,14 @@ func HandleConnection(conn net.Conn, chain *blockchain.BlockChain) {
 		fmt.Println("Unknown command")
 	}
 }
+func CloseDB(chain *blockchain.BlockChain) {
+	d := death.NewDeath(syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+	d.WaitForDeathWithFunc(func() {
+		defer os.Exit(1)
+		defer runtime.Goexit()
+		chain.Database.Close()
+	})
+}
 func StartServer(nodeID, minerAddress string) {
 	nodeAddress = fmt.Sprintf("localhost:%s", nodeID)
 	mineAddress = minerAddress
@@ -368,29 +393,4 @@ func StartServer(nodeID, minerAddress string) {
 		}
 		go HandleConnection(conn, chain)
 	}
-}
-func GobEncode(data interface{}) []byte {
-	var buff bytes.Buffer
-	enc := gob.NewEncoder(&buff)
-	err := enc.Encode(data)
-	if err != nil {
-		log.Panic(err)
-	}
-	return buff.Bytes()
-}
-func NodeIsKnown(addr string) bool {
-	for _, node := range KnownNodes {
-		if node == addr {
-			return true
-		}
-	}
-	return false
-}
-func CloseDB(chain *blockchain.BlockChain) {
-	d := death.NewDeath(syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
-	d.WaitForDeathWithFunc(func() {
-		defer os.Exit(1)
-		defer runtime.Goexit()
-		chain.Database.Close()
-	})
 }

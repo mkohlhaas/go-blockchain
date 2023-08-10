@@ -45,7 +45,7 @@ func (cli *CommandLine) StartNode(nodeID, minerAddress string) {
 func (cli *CommandLine) reindexUTXO(nodeID string) {
 	chain := blockchain.ContinueBlockChain(nodeID)
 	defer chain.Database.Close()
-	UTXOSet := blockchain.UTXOSet{chain}
+	UTXOSet := blockchain.UTXOSet{Blockchain: chain}
 	UTXOSet.Reindex()
 	count := UTXOSet.CountTransactions()
 	fmt.Printf("Done! There are %d transactions in the UTXO set.\n", count)
@@ -88,7 +88,7 @@ func (cli *CommandLine) createBlockChain(address, nodeID string) {
 	}
 	chain := blockchain.InitBlockChain(address, nodeID)
 	defer chain.Database.Close()
-	UTXOSet := blockchain.UTXOSet{chain}
+	UTXOSet := blockchain.UTXOSet{Blockchain: chain}
 	UTXOSet.Reindex()
 	fmt.Println("Finished!")
 }
@@ -97,7 +97,7 @@ func (cli *CommandLine) getBalance(address, nodeID string) {
 		log.Panic("Address is not Valid")
 	}
 	chain := blockchain.ContinueBlockChain(nodeID)
-	UTXOSet := blockchain.UTXOSet{chain}
+	UTXOSet := blockchain.UTXOSet{Blockchain: chain}
 	defer chain.Database.Close()
 	balance := 0
 	pubKeyHash := wallet.Base58Decode([]byte(address))
@@ -116,7 +116,7 @@ func (cli *CommandLine) send(from, to string, amount int, nodeID string, mineNow
 		log.Panic("Address is not Valid")
 	}
 	chain := blockchain.ContinueBlockChain(nodeID)
-	UTXOSet := blockchain.UTXOSet{chain}
+	UTXOSet := blockchain.UTXOSet{Blockchain: chain}
 	defer chain.Database.Close()
 	wallets, err := wallet.CreateWallets(nodeID)
 	if err != nil {
@@ -139,7 +139,7 @@ func (cli *CommandLine) Run() {
 	cli.validateArgs()
 	nodeID := os.Getenv("NODE_ID")
 	if nodeID == "" {
-		fmt.Printf("NODE_ID env is not set!")
+		fmt.Printf("Please set NODE_ID environment variable!")
 		runtime.Goexit()
 	}
 	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)

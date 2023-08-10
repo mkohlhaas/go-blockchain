@@ -10,6 +10,7 @@ import (
 	"log"
 )
 
+// https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/u03-14.svg
 const (
 	checksumLength = 4
 	version        = byte(0x00)
@@ -20,6 +21,9 @@ type Wallet struct {
 	PublicKey  []byte
 }
 
+// https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/03-13.svg
+// Returns Bitcoin address used by end-users.
+// The Bitcoin network deals with PKHs (Public Key Hash).
 func (w Wallet) Address() []byte {
 	pubHash := PublicKeyHash(w.PublicKey)
 	versionedHash := append([]byte{version}, pubHash...)
@@ -42,6 +46,7 @@ func MakeWallet() *Wallet {
 	wallet := Wallet{private, public}
 	return &wallet
 }
+// https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/03-06.svg
 func PublicKeyHash(pubKey []byte) []byte {
 	pubHash := sha256.Sum256(pubKey)
 	hasher := ripemd160.New()
@@ -57,6 +62,7 @@ func Checksum(payload []byte) []byte {
 	secondHash := sha256.Sum256(firstHash[:])
 	return secondHash[:checksumLength]
 }
+// https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/03-15.svg
 func ValidateAddress(address string) bool {
 	pubKeyHash := Base58Decode([]byte(address))
 	actualChecksum := pubKeyHash[len(pubKeyHash)-checksumLength:]
