@@ -6,8 +6,9 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+
+	"github.com/mkohlhaas/golang-blockchain/bcerror"
 	"golang.org/x/crypto/ripemd160"
-	"log"
 )
 
 // https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/u03-14.svg
@@ -35,9 +36,7 @@ func (w Wallet) Address() []byte {
 func NewKeyPair() (ecdsa.PrivateKey, []byte) {
 	curve := elliptic.P256()
 	private, err := ecdsa.GenerateKey(curve, rand.Reader)
-	if err != nil {
-		log.Panic(err)
-	}
+	bcerror.Handle(err)
 	pub := append(private.PublicKey.X.Bytes(), private.PublicKey.Y.Bytes()...)
 	return *private, pub
 }
@@ -46,14 +45,13 @@ func MakeWallet() *Wallet {
 	wallet := Wallet{private, public}
 	return &wallet
 }
+
 // https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/03-06.svg
 func PublicKeyHash(pubKey []byte) []byte {
 	pubHash := sha256.Sum256(pubKey)
 	hasher := ripemd160.New()
 	_, err := hasher.Write(pubHash[:])
-	if err != nil {
-		log.Panic(err)
-	}
+	bcerror.Handle(err)
 	publicRipMD := hasher.Sum(nil)
 	return publicRipMD
 }
@@ -62,6 +60,7 @@ func Checksum(payload []byte) []byte {
 	secondHash := sha256.Sum256(firstHash[:])
 	return secondHash[:checksumLength]
 }
+
 // https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/03-15.svg
 func ValidateAddress(address string) bool {
 	pubKeyHash := Base58Decode([]byte(address))

@@ -14,7 +14,7 @@ import (
 	"syscall"
 
 	"github.com/mkohlhaas/golang-blockchain/blockchain"
-  "github.com/vrecan/death/v3"
+	"github.com/vrecan/death/v3"
 )
 
 const (

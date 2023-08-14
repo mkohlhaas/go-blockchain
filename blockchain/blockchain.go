@@ -21,6 +21,10 @@ const (
 	genesisData = "The Times 03/Jan/2009: Chancellor on brink of second bailout for banks."
 )
 
+var (
+	lastHashEntry = []byte("lh")
+)
+
 type BlockChain struct {
 	LastHash []byte
 	Database *badger.DB
@@ -38,21 +42,22 @@ func ContinueBlockChain(nodeId string) *BlockChain {
 		fmt.Println("No existing blockchain found, create one!")
 		runtime.Goexit()
 	}
-	var lastHash []byte
-	opts := badger.DefaultOptions
-	opts.Dir = path
-	opts.ValueDir = path
-	db, err := openDB(path, opts)
+	opts := badger.DefaultOptions(path)
+	db, err := openDB(&opts)
 	bcerror.Handle(err)
+	var lastHash []byte
 	err = db.Update(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("lh"))
+		item, err := txn.Get(lastHashEntry)
 		bcerror.Handle(err)
-		lastHash, err = item.Value()
+		err = item.Value(func(val []byte) error {
+			// fmt.Printf("LastHash is: %v\n", val)
+			lastHash = append([]byte{}, val...)
+			return nil
+		})
 		return err
 	})
 	bcerror.Handle(err)
-	chain := BlockChain{lastHash, db}
-	return &chain
+	return &BlockChain{lastHash, db}
 }
 func InitBlockChain(address, nodeId string) *BlockChain {
 	path := fmt.Sprintf(dbPath, nodeId)
@@ -61,10 +66,8 @@ func InitBlockChain(address, nodeId string) *BlockChain {
 		runtime.Goexit()
 	}
 	var lastHash []byte
-	opts := badger.DefaultOptions
-	opts.Dir = path
-	opts.ValueDir = path
-	db, err := openDB(path, opts)
+	opts := badger.DefaultOptions(path)
+	db, err := openDB(&opts)
 	bcerror.Handle(err)
 	err = db.Update(func(txn *badger.Txn) error {
 		cbtx := CoinbaseTx(address, genesisData)
@@ -72,7 +75,7 @@ func InitBlockChain(address, nodeId string) *BlockChain {
 		fmt.Println("Genesis created")
 		err = txn.Set(genesis.Hash, genesis.Serialize())
 		bcerror.Handle(err)
-		err = txn.Set([]byte("lh"), genesis.Hash)
+		err = txn.Set(lastHashEntry, genesis.Hash)
 		lastHash = genesis.Hash
 		return err
 	})
@@ -88,15 +91,23 @@ func (chain *BlockChain) AddBlock(block *Block) {
 		blockData := block.Serialize()
 		err := txn.Set(block.Hash, blockData)
 		bcerror.Handle(err)
-		item, err := txn.Get([]byte("lh"))
+		item, err := txn.Get(lastHashEntry)
 		bcerror.Handle(err)
-		lastHash, _ := item.Value()
+		var lastHash []byte
+		err = item.Value(func(val []byte) error {
+			lastHash = append([]byte{}, val...)
+			return nil
+		})
 		item, err = txn.Get(lastHash)
 		bcerror.Handle(err)
-		lastBlockData, _ := item.Value()
+		var lastBlockData []byte
+		err = item.Value(func(val []byte) error {
+			lastBlockData = append([]byte{}, val...)
+			return nil
+		})
 		lastBlock := Deserialize(lastBlockData)
 		if block.Height > lastBlock.Height {
-			err = txn.Set([]byte("lh"), block.Hash)
+			err = txn.Set(lastHashEntry, block.Hash)
 			bcerror.Handle(err)
 			chain.LastHash = block.Hash
 		}
@@ -107,12 +118,21 @@ func (chain *BlockChain) AddBlock(block *Block) {
 func (chain *BlockChain) GetBestHeight() int {
 	var lastBlock Block
 	err := chain.Database.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("lh"))
+		item, err := txn.Get(lastHashEntry)
 		bcerror.Handle(err)
-		lastHash, _ := item.Value()
+		var lastHash []byte
+		err = item.Value(func(val []byte) error {
+			lastHash = append([]byte{}, val...)
+			return nil
+		})
 		item, err = txn.Get(lastHash)
 		bcerror.Handle(err)
-		lastBlockData, _ := item.Value()
+		var lastBlockData []byte
+		err = item.Value(func(val []byte) error {
+			lastBlockData = append([]byte{}, val...)
+			return nil
+		})
+		bcerror.Handle(err)
 		lastBlock = *Deserialize(lastBlockData)
 		return nil
 	})
@@ -123,9 +143,13 @@ func (chain *BlockChain) GetBlock(blockHash []byte) (Block, error) {
 	var block Block
 	err := chain.Database.View(func(txn *badger.Txn) error {
 		if item, err := txn.Get(blockHash); err != nil {
-			return errors.New("Block is not found")
+			return errors.New("Block not found")
 		} else {
-			blockData, _ := item.Value()
+			var blockData []byte
+			err = item.Value(func(val []byte) error {
+				blockData = append([]byte{}, val...)
+				return nil
+			})
 			block = *Deserialize(blockData)
 		}
 		return nil
@@ -153,12 +177,19 @@ func (chain *BlockChain) MineBlock(transactions []*Transaction) *Block {
 		}
 	}
 	err := chain.Database.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("lh"))
+		item, err := txn.Get(lastHashEntry)
 		bcerror.Handle(err)
-		lastHash, err = item.Value()
+		err = item.Value(func(val []byte) error {
+			lastHash = append([]byte{}, val...)
+			return nil
+		})
 		item, err = txn.Get(lastHash)
 		bcerror.Handle(err)
-		lastBlockData, _ := item.Value()
+		var lastBlockData []byte
+		err = item.Value(func(val []byte) error {
+			lastBlockData = append([]byte{}, val...)
+			return nil
+		})
 		lastBlock := Deserialize(lastBlockData)
 		lastHeight = lastBlock.Height
 		return err
@@ -168,7 +199,7 @@ func (chain *BlockChain) MineBlock(transactions []*Transaction) *Block {
 	err = chain.Database.Update(func(txn *badger.Txn) error {
 		err := txn.Set(newBlock.Hash, newBlock.Serialize())
 		bcerror.Handle(err)
-		err = txn.Set([]byte("lh"), newBlock.Hash)
+		err = txn.Set(lastHashEntry, newBlock.Hash)
 		chain.LastHash = newBlock.Hash
 		return err
 	})
@@ -239,20 +270,19 @@ func (bc *BlockChain) VerifyTransaction(tx *Transaction) bool {
 	}
 	return tx.Verify(prevTXs)
 }
-func retry(dir string, originalOpts badger.Options) (*badger.DB, error) {
-	lockPath := filepath.Join(dir, "LOCK")
+func retry(opts badger.Options) (*badger.DB, error) {
+	lockPath := filepath.Join(opts.Dir, "LOCK")
 	if err := os.Remove(lockPath); err != nil {
 		return nil, fmt.Errorf(`removing "LOCK": %s`, err)
 	}
-	retryOpts := originalOpts
-	retryOpts.Truncate = true
-	db, err := badger.Open(retryOpts)
+	opts.Truncate = true
+	db, err := badger.Open(opts)
 	return db, err
 }
-func openDB(dir string, opts badger.Options) (*badger.DB, error) {
-	if db, err := badger.Open(opts); err != nil {
+func openDB(opts *badger.Options) (*badger.DB, error) {
+	if db, err := badger.Open(*opts); err != nil {
 		if strings.Contains(err.Error(), "LOCK") {
-			if db, err := retry(dir, opts); err == nil {
+			if db, err := retry(*opts); err == nil {
 				log.Println("database unlocked, value log truncated")
 				return db, nil
 			}

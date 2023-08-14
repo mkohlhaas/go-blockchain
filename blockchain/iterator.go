@@ -20,7 +20,11 @@ func (bc *BlockChain) CreateBCIterator() iterator {
 	err := bc.Database.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(bc.LastHash)
 		bcerror.Handle(err)
-		encodedBlock, err := item.Value()
+		var encodedBlock []byte
+		err = item.Value(func(val []byte) error {
+			encodedBlock = append([]byte{}, val...)
+			return nil
+		})
 		block = Deserialize(encodedBlock)
 		return err
 	})
@@ -35,16 +39,20 @@ func (iter *BlockChainIterator) HasNext() bool {
 	return iter.CurrentBlock.Height != 0
 }
 
-func (iter *BlockChainIterator) GetNext() *Block{
+func (iter *BlockChainIterator) GetNext() *Block {
 	var block *Block
 	err := iter.Database.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(iter.CurrentBlock.PrevHash)
 		bcerror.Handle(err)
-		encodedBlock, err := item.Value()
+		var encodedBlock []byte
+		err = item.Value(func(val []byte) error {
+			encodedBlock = append([]byte{}, val...)
+			return nil
+		})
 		block = Deserialize(encodedBlock)
 		return err
 	})
 	bcerror.Handle(err)
-  iter.CurrentBlock = block
+	iter.CurrentBlock = block
 	return block
 }

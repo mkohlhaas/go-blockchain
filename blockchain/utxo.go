@@ -29,7 +29,11 @@ func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[s
 		for it.Seek(utxoPrefix); it.ValidForPrefix(utxoPrefix); it.Next() {
 			item := it.Item()
 			k := item.Key()
-			v, err := item.Value()
+			var v []byte
+			err := item.Value(func(val []byte) error {
+				v = append([]byte{}, val...)
+				return nil
+			})
 			bcerror.Handle(err)
 			k = bytes.TrimPrefix(k, utxoPrefix)
 			txID := hex.EncodeToString(k)
@@ -55,7 +59,11 @@ func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) []TxOutput {
 		defer it.Close()
 		for it.Seek(utxoPrefix); it.ValidForPrefix(utxoPrefix); it.Next() {
 			item := it.Item()
-			v, err := item.Value()
+			var v []byte
+			err := item.Value(func(val []byte) error {
+				v = append([]byte{}, val...)
+				return nil
+			})
 			bcerror.Handle(err)
 			outs := DeserializeOutputs(v)
 			for _, out := range outs.Outputs {
@@ -110,7 +118,11 @@ func (u *UTXOSet) Update(block *Block) {
 					inID := append(utxoPrefix, in.ID...)
 					item, err := txn.Get(inID)
 					bcerror.Handle(err)
-					v, err := item.Value()
+					var v []byte
+					err = item.Value(func(val []byte) error {
+						v = append([]byte{}, val...)
+						return nil
+					})
 					bcerror.Handle(err)
 					outs := DeserializeOutputs(v)
 					for outIdx, out := range outs.Outputs {

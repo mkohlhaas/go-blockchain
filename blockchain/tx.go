@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 
-	"github.com/mkohlhaas/golang-blockchain/wallet"
 	"github.com/mkohlhaas/golang-blockchain/bcerror"
+	"github.com/mkohlhaas/golang-blockchain/wallet"
 )
 
 // Script stack (input on top of output):

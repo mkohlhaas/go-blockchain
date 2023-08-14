@@ -5,9 +5,9 @@ import (
 	"crypto/elliptic"
 	"encoding/gob"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"os"
+
+	"github.com/mkohlhaas/golang-blockchain/bcerror"
 )
 
 const walletFile = "./tmp/wallets_%s.data"
@@ -38,36 +38,28 @@ func (ws *Wallets) GetAllAddresses() []string {
 func (ws Wallets) GetWallet(address string) Wallet {
 	return *ws.Wallets[address]
 }
-func (ws *Wallets) LoadFile(nodeId string) error {
-	walletFile := fmt.Sprintf(walletFile, nodeId)
-	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
-		return err
-	}
-	var wallets Wallets
-	fileContent, err := ioutil.ReadFile(walletFile)
-	if err != nil {
-		return err
-	}
-	gob.Register(elliptic.P256())
-	decoder := gob.NewDecoder(bytes.NewReader(fileContent))
-	err = decoder.Decode(&wallets)
-	if err != nil {
-		return err
-	}
-	ws.Wallets = wallets.Wallets
-	return nil
-}
 func (ws *Wallets) SaveFile(nodeId string) {
 	var content bytes.Buffer
 	walletFile := fmt.Sprintf(walletFile, nodeId)
 	gob.Register(elliptic.P256())
 	encoder := gob.NewEncoder(&content)
 	err := encoder.Encode(ws)
-	if err != nil {
-		log.Panic(err)
+	bcerror.Handle(err)
+	err = os.WriteFile(walletFile, content.Bytes(), 0644)
+	bcerror.Handle(err)
+}
+func (ws *Wallets) LoadFile(nodeId string) error {
+	walletFile := fmt.Sprintf(walletFile, nodeId)
+	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
+		return err
 	}
-	err = ioutil.WriteFile(walletFile, content.Bytes(), 0644)
-	if err != nil {
-		log.Panic(err)
-	}
+	var wallets Wallets
+	fileContent, err := os.ReadFile(walletFile)
+	bcerror.Handle(err)
+	gob.Register(elliptic.P256())
+	decoder := gob.NewDecoder(bytes.NewReader(fileContent))
+	err = decoder.Decode(&wallets)
+	bcerror.Handle(err)
+	ws.Wallets = wallets.Wallets
+	return nil
 }
