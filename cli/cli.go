@@ -66,9 +66,9 @@ func (cli *CommandLine) createWallet(nodeID string) {
 func (cli *CommandLine) printChain(nodeID string) {
 	chain := blockchain.ContinueBlockChain(nodeID)
 	defer chain.Database.Close()
-	iter := chain.Iterator()
-	for {
-		block := iter.Next()
+	iter := chain.CreateBCIterator()
+	for iter.HasNext() {
+		block := iter.GetNext()
 		fmt.Printf("Hash: %x\n", block.Hash)
 		fmt.Printf("Prev. hash: %x\n", block.PrevHash)
 		pow := blockchain.NewProof(block)
@@ -125,7 +125,7 @@ func (cli *CommandLine) send(from, to string, amount int, nodeID string, mineNow
 	wallet := wallets.GetWallet(from)
 	tx := blockchain.NewTransaction(&wallet, to, amount, &UTXOSet)
 	if mineNow {
-		cbTx := blockchain.CoinbaseTx(from, "")
+		cbTx := blockchain.CoinbaseTx(from)
 		txs := []*blockchain.Transaction{cbTx, tx}
 		block := chain.MineBlock(txs)
 		UTXOSet.Update(block)

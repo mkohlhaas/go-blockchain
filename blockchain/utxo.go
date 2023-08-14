@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"github.com/dgraph-io/badger"
 	"log"
+
+	"github.com/mkohlhaas/golang-blockchain/bcerror"
 )
 
 var (
@@ -28,7 +30,7 @@ func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[s
 			item := it.Item()
 			k := item.Key()
 			v, err := item.Value()
-			Handle(err)
+			bcerror.Handle(err)
 			k = bytes.TrimPrefix(k, utxoPrefix)
 			txID := hex.EncodeToString(k)
 			outs := DeserializeOutputs(v)
@@ -41,7 +43,7 @@ func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[s
 		}
 		return nil
 	})
-	Handle(err)
+	bcerror.Handle(err)
 	return accumulated, unspentOuts
 }
 func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) []TxOutput {
@@ -54,7 +56,7 @@ func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) []TxOutput {
 		for it.Seek(utxoPrefix); it.ValidForPrefix(utxoPrefix); it.Next() {
 			item := it.Item()
 			v, err := item.Value()
-			Handle(err)
+			bcerror.Handle(err)
 			outs := DeserializeOutputs(v)
 			for _, out := range outs.Outputs {
 				if out.IsLockedWithKey(pubKeyHash) {
@@ -64,7 +66,7 @@ func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) []TxOutput {
 		}
 		return nil
 	})
-	Handle(err)
+	bcerror.Handle(err)
 	return UTXOs
 }
 func (u UTXOSet) CountTransactions() int {
@@ -79,7 +81,7 @@ func (u UTXOSet) CountTransactions() int {
 		}
 		return nil
 	})
-	Handle(err)
+	bcerror.Handle(err)
 	return counter
 }
 func (u UTXOSet) Reindex() {
@@ -89,14 +91,14 @@ func (u UTXOSet) Reindex() {
 	err := db.Update(func(txn *badger.Txn) error {
 		for txId, outs := range UTXO {
 			key, err := hex.DecodeString(txId)
-			Handle(err)
+			bcerror.Handle(err)
 			key = append(utxoPrefix, key...)
 			err = txn.Set(key, outs.Serialize())
-			Handle(err)
+			bcerror.Handle(err)
 		}
 		return nil
 	})
-	Handle(err)
+	bcerror.Handle(err)
 }
 func (u *UTXOSet) Update(block *Block) {
 	db := u.Blockchain.Database
@@ -107,9 +109,9 @@ func (u *UTXOSet) Update(block *Block) {
 					updatedOuts := TxOutputs{}
 					inID := append(utxoPrefix, in.ID...)
 					item, err := txn.Get(inID)
-					Handle(err)
+					bcerror.Handle(err)
 					v, err := item.Value()
-					Handle(err)
+					bcerror.Handle(err)
 					outs := DeserializeOutputs(v)
 					for outIdx, out := range outs.Outputs {
 						if outIdx != in.Out {
@@ -138,7 +140,7 @@ func (u *UTXOSet) Update(block *Block) {
 		}
 		return nil
 	})
-	Handle(err)
+	bcerror.Handle(err)
 }
 func (u *UTXOSet) DeleteByPrefix(prefix []byte) {
 	deleteKeys := func(keysForDelete [][]byte) error {

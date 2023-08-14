@@ -3,7 +3,9 @@ package blockchain
 import (
 	"bytes"
 	"encoding/gob"
+
 	"github.com/mkohlhaas/golang-blockchain/wallet"
+	"github.com/mkohlhaas/golang-blockchain/bcerror"
 )
 
 // Script stack (input on top of output):
@@ -45,13 +47,13 @@ func (outs TxOutputs) Serialize() []byte {
 	var buffer bytes.Buffer
 	encode := gob.NewEncoder(&buffer)
 	err := encode.Encode(outs)
-	Handle(err)
+	bcerror.Handle(err)
 	return buffer.Bytes()
 }
 func DeserializeOutputs(data []byte) TxOutputs {
 	var outputs TxOutputs
 	decode := gob.NewDecoder(bytes.NewReader(data))
 	err := decode.Decode(&outputs)
-	Handle(err)
+	bcerror.Handle(err)
 	return outputs
 }

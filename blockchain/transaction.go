@@ -9,10 +9,12 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
-	"github.com/mkohlhaas/golang-blockchain/wallet"
 	"log"
 	"math/big"
 	"strings"
+
+	"github.com/mkohlhaas/golang-blockchain/bcerror"
+	"github.com/mkohlhaas/golang-blockchain/wallet"
 )
 
 const (
@@ -45,23 +47,28 @@ func DeserializeTransaction(data []byte) Transaction {
 	var transaction Transaction
 	decoder := gob.NewDecoder(bytes.NewReader(data))
 	err := decoder.Decode(&transaction)
-	Handle(err)
+	bcerror.Handle(err)
 	return transaction
 }
+
 // First transcaction in a block is always a coinbase transaction.
-func CoinbaseTx(to, data string) *Transaction {
-  // coinbase signature script can be anything
-	if data == "" {
+func CoinbaseTx(to string, data ...string) *Transaction {
+	dat := data[0]
+	if dat == "" {
 		randData := make([]byte, 24)
 		_, err := rand.Read(randData)
-		Handle(err)
-		data = fmt.Sprintf("%x", randData)
+		bcerror.Handle(err)
+		dat = fmt.Sprintf("%x", randData)
 	}
-	txin := TxInput{[]byte{}, noIndex, nil, []byte(data)}
+	txin := TxInput{
+		Out:    noIndex,
+		PubKey: []byte(dat)}
 	txout := NewTXOutput(20, to)
-	tx := Transaction{nil, []TxInput{txin}, []TxOutput{*txout}}
+	tx := &Transaction{
+		Inputs:  []TxInput{txin},
+		Outputs: []TxOutput{*txout}}
 	tx.ID = tx.Hash()
-	return &tx
+	return tx
 }
 func NewTransaction(w *wallet.Wallet, to string, amount int, UTXO *UTXOSet) *Transaction {
 	var inputs []TxInput
@@ -73,7 +80,7 @@ func NewTransaction(w *wallet.Wallet, to string, amount int, UTXO *UTXOSet) *Tra
 	}
 	for txid, outs := range validOutputs {
 		txID, err := hex.DecodeString(txid)
-		Handle(err)
+		bcerror.Handle(err)
 		for _, out := range outs {
 			input := TxInput{txID, out, nil, w.PublicKey}
 			inputs = append(inputs, input)
@@ -90,7 +97,7 @@ func NewTransaction(w *wallet.Wallet, to string, amount int, UTXO *UTXOSet) *Tra
 	return &tx
 }
 func (tx *Transaction) IsCoinbase() bool {
-	return len(tx.Inputs) == 1 && len(tx.Inputs[0].ID) == 0 && tx.Inputs[0].Out == noIndex
+	return tx.Inputs[0].Out == noIndex
 }
 func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transaction) {
 	if tx.IsCoinbase() {
@@ -109,7 +116,7 @@ func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transac
 		dataToSign := fmt.Sprintf("%x\n", txCleansed)
 		// Signing uses the entire cleansed transaction!
 		r, s, err := ecdsa.Sign(rand.Reader, &privKey, []byte(dataToSign))
-		Handle(err)
+		bcerror.Handle(err)
 		signature := append(r.Bytes(), s.Bytes()...)
 		tx.Inputs[inId].Signature = signature
 		txCleansed.Inputs[inId].PubKey = nil

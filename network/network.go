@@ -290,7 +290,7 @@ func MineTx(chain *blockchain.BlockChain) {
 		fmt.Println("All Transactions are invalid")
 		return
 	}
-	cbTx := blockchain.CoinbaseTx(mineAddress, "")
+	cbTx := blockchain.CoinbaseTx(mineAddress)
 	txs = append(txs, cbTx)
 	newBlock := chain.MineBlock(txs)
 	UTXOSet := blockchain.UTXOSet{Blockchain: chain}
