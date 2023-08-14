@@ -5,8 +5,6 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
-	"github.com/mkohlhaas/golang-blockchain/blockchain"
-	"gopkg.in/vrecan/death.v3"
 	"io"
 	"io/ioutil"
 	"log"
@@ -14,6 +12,9 @@ import (
 	"os"
 	"runtime"
 	"syscall"
+
+	"github.com/mkohlhaas/golang-blockchain/blockchain"
+  "github.com/vrecan/death/v3"
 )
 
 const (
