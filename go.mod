@@ -1,7 +1,5 @@
 module github.com/mkohlhaas/golang-blockchain
 
-go 1.18
-
 require (
 	github.com/dgraph-io/badger v1.5.4
 	github.com/mr-tron/base58 v1.1.1
