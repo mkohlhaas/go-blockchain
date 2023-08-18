@@ -3,13 +3,14 @@ package cli
 import (
 	"flag"
 	"fmt"
-	"github.com/mkohlhaas/golang-blockchain/blockchain"
-	"github.com/mkohlhaas/golang-blockchain/network"
-	"github.com/mkohlhaas/golang-blockchain/wallet"
 	"log"
 	"os"
 	"runtime"
 	"strconv"
+
+	"github.com/mkohlhaas/golang-blockchain/blockchain"
+	"github.com/mkohlhaas/golang-blockchain/network"
+	"github.com/mkohlhaas/golang-blockchain/wallet"
 )
 
 type CommandLine struct{}
@@ -34,7 +35,7 @@ func (cli *CommandLine) validateArgs() {
 func (cli *CommandLine) StartNode(nodeID, minerAddress string) {
 	fmt.Printf("Starting Node %s\n", nodeID)
 	if len(minerAddress) > 0 {
-		if wallet.ValidateAddress(minerAddress) {
+		if wallet.Validate(minerAddress) {
 			fmt.Println("Mining is on. Address to receive rewards: ", minerAddress)
 		} else {
 			log.Panic("Wrong miner address!")
@@ -43,7 +44,8 @@ func (cli *CommandLine) StartNode(nodeID, minerAddress string) {
 	network.StartServer(nodeID, minerAddress)
 }
 func (cli *CommandLine) reindexUTXO(nodeID string) {
-	chain := blockchain.ContinueBlockChain(nodeID)
+	chain := blockchain.OpenBlockChain(nodeID)
+	log.Printf("Blockchain in cli reindexUTXO: %+v\n", chain)
 	defer chain.Database.Close()
 	UTXOSet := blockchain.UTXOSet{Blockchain: chain}
 	UTXOSet.Reindex()
@@ -51,28 +53,28 @@ func (cli *CommandLine) reindexUTXO(nodeID string) {
 	fmt.Printf("Done! There are %d transactions in the UTXO set.\n", count)
 }
 func (cli *CommandLine) listAddresses(nodeID string) {
-	wallets, _ := wallet.CreateWallets(nodeID)
+	wallets, _ := wallet.OpenWallets(nodeID)
 	addresses := wallets.GetAllAddresses()
 	for _, address := range addresses {
 		fmt.Println(address)
 	}
 }
 func (cli *CommandLine) createWallet(nodeID string) {
-	wallets, _ := wallet.CreateWallets(nodeID)
+	wallets, _ := wallet.OpenWallets(nodeID)
 	address := wallets.AddWallet()
 	wallets.SaveFile(nodeID)
 	fmt.Printf("New address is: %s\n", address)
 }
 func (cli *CommandLine) printChain(nodeID string) {
-	chain := blockchain.ContinueBlockChain(nodeID)
-	defer chain.Database.Close()
-	iter := chain.CreateBCIterator()
+	bc := blockchain.OpenBlockChain(nodeID)
+	defer bc.Database.Close()
+	iter := bc.CreateBCIterator()
 	for iter.HasNext() {
 		block := iter.GetNext()
 		fmt.Printf("Hash: %x\n", block.Hash)
 		fmt.Printf("Prev. hash: %x\n", block.PrevHash)
-		pow := blockchain.NewProof(block)
-		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
+		block.RunProof()
+		fmt.Printf("PoW: %s\n", strconv.FormatBool(block.IsValidBlockHeader()))
 		for _, tx := range block.Transactions {
 			fmt.Println(tx)
 		}
@@ -83,25 +85,24 @@ func (cli *CommandLine) printChain(nodeID string) {
 	}
 }
 func (cli *CommandLine) createBlockChain(address, nodeID string) {
-	if !wallet.ValidateAddress(address) {
+	if !wallet.Validate(address) {
 		log.Panic("Address is not Valid")
 	}
-	chain := blockchain.InitBlockChain(address, nodeID)
+	chain := blockchain.CreateBlockChain(address, nodeID)
 	defer chain.Database.Close()
 	UTXOSet := blockchain.UTXOSet{Blockchain: chain}
 	UTXOSet.Reindex()
 	fmt.Println("Finished!")
 }
 func (cli *CommandLine) getBalance(address, nodeID string) {
-	if !wallet.ValidateAddress(address) {
+	if !wallet.Validate(address) {
 		log.Panic("Address is not Valid")
 	}
-	chain := blockchain.ContinueBlockChain(nodeID)
+	chain := blockchain.OpenBlockChain(nodeID)
 	UTXOSet := blockchain.UTXOSet{Blockchain: chain}
 	defer chain.Database.Close()
 	balance := 0
-	pubKeyHash := wallet.Base58Decode([]byte(address))
-	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
+	pubKeyHash := wallet.PKHFrom([]byte(address))
 	UTXOs := UTXOSet.FindUnspentTransactions(pubKeyHash)
 	for _, out := range UTXOs {
 		balance += out.Value
@@ -109,16 +110,16 @@ func (cli *CommandLine) getBalance(address, nodeID string) {
 	fmt.Printf("Balance of %s: %d\n", address, balance)
 }
 func (cli *CommandLine) send(from, to string, amount int, nodeID string, mineNow bool) {
-	if !wallet.ValidateAddress(to) {
+	if !wallet.Validate(to) {
 		log.Panic("Address is not Valid")
 	}
-	if !wallet.ValidateAddress(from) {
+	if !wallet.Validate(from) {
 		log.Panic("Address is not Valid")
 	}
-	chain := blockchain.ContinueBlockChain(nodeID)
+	chain := blockchain.OpenBlockChain(nodeID)
 	UTXOSet := blockchain.UTXOSet{Blockchain: chain}
 	defer chain.Database.Close()
-	wallets, err := wallet.CreateWallets(nodeID)
+	wallets, err := wallet.OpenWallets(nodeID)
 	if err != nil {
 		log.Panic(err)
 	}

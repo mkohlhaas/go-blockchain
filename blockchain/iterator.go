@@ -5,16 +5,19 @@ import (
 	"github.com/mkohlhaas/golang-blockchain/bcerror"
 )
 
+// iterator interface
 type iterator interface {
 	HasNext() bool
 	GetNext() *Block
 }
 
+// Blockchain iterator
 type BlockChainIterator struct {
-	CurrentBlock *Block
-	Database     *badger.DB
+	currentBlock *Block
+	database     *badger.DB
 }
 
+// Creates new iterator from a blockchain.
 func (bc *BlockChain) CreateBCIterator() iterator {
 	var block *Block
 	err := bc.Database.View(func(txn *badger.Txn) error {
@@ -25,34 +28,36 @@ func (bc *BlockChain) CreateBCIterator() iterator {
 			encodedBlock = append([]byte{}, val...)
 			return nil
 		})
-		block = Deserialize(encodedBlock)
+		block = DeserializeBlock(encodedBlock)
 		return err
 	})
 	bcerror.Handle(err)
 	return &BlockChainIterator{
-		CurrentBlock: block,
-		Database:     bc.Database,
+		currentBlock: block,
+		database:     bc.Database,
 	}
 }
 
+// Returns true if there is another block in the blockchain.
 func (iter *BlockChainIterator) HasNext() bool {
-	return iter.CurrentBlock.Height != 0
+	return iter.currentBlock.IsNotGenesisBlock()
 }
 
+// Returns the next block from the blockchain.
 func (iter *BlockChainIterator) GetNext() *Block {
 	var block *Block
-	err := iter.Database.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(iter.CurrentBlock.PrevHash)
+	err := iter.database.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(iter.currentBlock.PrevHash)
 		bcerror.Handle(err)
 		var encodedBlock []byte
 		err = item.Value(func(val []byte) error {
 			encodedBlock = append([]byte{}, val...)
 			return nil
 		})
-		block = Deserialize(encodedBlock)
+		block = DeserializeBlock(encodedBlock)
 		return err
 	})
 	bcerror.Handle(err)
-	iter.CurrentBlock = block
+	iter.currentBlock = block
 	return block
 }

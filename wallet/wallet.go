@@ -11,62 +11,74 @@ import (
 	"golang.org/x/crypto/ripemd160"
 )
 
-// https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/u03-14.svg
-const (
-	checksumLength = 4
-	version        = byte(0x00)
-)
-
+// A wallet is just a pair of a private and a public key.
 type Wallet struct {
 	PrivateKey ecdsa.PrivateKey
 	PublicKey  []byte
+}
+
+func PKToAddress(pubKey []byte) []byte {
+	pubHash := PublicKeyHash(pubKey)
+	versionedHash := append([]byte{0}, pubHash...)
+	checksum := Checksum(versionedHash)
+	hash := append(versionedHash, checksum...)
+	return Base58Encode(hash)
 }
 
 // https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/03-13.svg
 // Returns Bitcoin address used by end-users.
 // The Bitcoin network deals with PKHs (Public Key Hash).
 func (w Wallet) Address() []byte {
-	pubHash := PublicKeyHash(w.PublicKey)
-	versionedHash := append([]byte{version}, pubHash...)
-	checksum := Checksum(versionedHash)
-	fullHash := append(versionedHash, checksum...)
-	address := Base58Encode(fullHash)
-	return address
+	return PKToAddress(w.PublicKey)
 }
-func NewKeyPair() (ecdsa.PrivateKey, []byte) {
+
+// Creates a new private key and from it its public key.
+// Returns (private key, public key).
+func newKeyPair() (ecdsa.PrivateKey, []byte) {
 	curve := elliptic.P256()
-	private, err := ecdsa.GenerateKey(curve, rand.Reader)
+	sKey, err := ecdsa.GenerateKey(curve, rand.Reader)
 	bcerror.Handle(err)
-	pub := append(private.PublicKey.X.Bytes(), private.PublicKey.Y.Bytes()...)
-	return *private, pub
+	pKey := append(sKey.PublicKey.X.Bytes(), sKey.PublicKey.Y.Bytes()...)
+	return *sKey, pKey
 }
+
+// Create a new wallet.
 func MakeWallet() *Wallet {
-	private, public := NewKeyPair()
-	wallet := Wallet{private, public}
-	return &wallet
+	private, public := newKeyPair()
+	return &Wallet{private, public}
+}
+
+// Calculates ripemd-160 hash.
+func ripeMD(pubHash []byte) []byte {
+	hasher := ripemd160.New()
+	_, err := hasher.Write(pubHash)
+	bcerror.Handle(err)
+	return hasher.Sum(nil)
 }
 
 // https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/03-06.svg
+// Returns public key hash of `pubKey`.
+// = Hash160 = sha256 then ripemd160
 func PublicKeyHash(pubKey []byte) []byte {
 	pubHash := sha256.Sum256(pubKey)
-	hasher := ripemd160.New()
-	_, err := hasher.Write(pubHash[:])
-	bcerror.Handle(err)
-	publicRipMD := hasher.Sum(nil)
-	return publicRipMD
+	return ripeMD(pubHash[:])
 }
+
+// Calculates checksum for Hash256.
+// Checksum is the first 4 bytes of double sha256.
 func Checksum(payload []byte) []byte {
-	firstHash := sha256.Sum256(payload)
-	secondHash := sha256.Sum256(firstHash[:])
-	return secondHash[:checksumLength]
+	fstHash := sha256.Sum256(payload)
+	sndHash := sha256.Sum256(fstHash[:])
+	return sndHash[:4]
 }
 
 // https://raw.githubusercontent.com/kallerosenbaum/grokkingbitcoin/master/images/ch03/03-15.svg
-func ValidateAddress(address string) bool {
+// Checks checksum of address.
+func Validate(address string) bool {
 	pubKeyHash := Base58Decode([]byte(address))
-	actualChecksum := pubKeyHash[len(pubKeyHash)-checksumLength:]
+	actualChecksum := pubKeyHash[len(pubKeyHash)-4:]
 	version := pubKeyHash[0]
-	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-checksumLength]
-	targetChecksum := Checksum(append([]byte{version}, pubKeyHash...))
-	return bytes.Compare(actualChecksum, targetChecksum) == 0
+	pubKeyHash = PKHFrom([]byte(address))
+	calculatedChecksum := Checksum(append([]byte{version}, pubKeyHash...))
+	return bytes.Compare(actualChecksum, calculatedChecksum) == 0
 }

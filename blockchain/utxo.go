@@ -3,21 +3,27 @@ package blockchain
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/dgraph-io/badger"
+	"fmt"
 	"log"
+
+	"github.com/dgraph-io/badger"
 
 	"github.com/mkohlhaas/golang-blockchain/bcerror"
 )
 
 var (
-	utxoPrefix   = []byte("utxo-")
-	prefixLength = len(utxoPrefix)
+	// To separate entries in BadgerDB.
+	// BadgerDB does not have namespaces.
+	utxoPrefix = []byte("utxo-")
 )
 
+// UTXOSet just uses the underlying blockchain.
+// UTXO = Unspent Transaction Outputs
 type UTXOSet struct {
 	Blockchain *BlockChain
 }
 
+// Returns accumulated amount and a map: Transaction ID -> List of Indexes in Transaction.
 func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[string][]int) {
 	unspentOuts := make(map[string][]int)
 	accumulated := 0
@@ -39,7 +45,7 @@ func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[s
 			txID := hex.EncodeToString(k)
 			outs := DeserializeOutputs(v)
 			for outIdx, out := range outs.Outputs {
-				if out.IsLockedWithKey(pubKeyHash) && accumulated < amount {
+				if out.IsLockedWith(pubKeyHash) && accumulated < amount {
 					accumulated += out.Value
 					unspentOuts[txID] = append(unspentOuts[txID], outIdx)
 				}
@@ -67,7 +73,7 @@ func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) []TxOutput {
 			bcerror.Handle(err)
 			outs := DeserializeOutputs(v)
 			for _, out := range outs.Outputs {
-				if out.IsLockedWithKey(pubKeyHash) {
+				if out.IsLockedWith(pubKeyHash) {
 					UTXOs = append(UTXOs, out)
 				}
 			}
@@ -92,15 +98,20 @@ func (u UTXOSet) CountTransactions() int {
 	bcerror.Handle(err)
 	return counter
 }
+
+// Rebuilds the index of unspent transaction outputs.
 func (u UTXOSet) Reindex() {
 	db := u.Blockchain.Database
 	u.DeleteByPrefix(utxoPrefix)
+	log.Printf("Before UTXO\n")
 	UTXO := u.Blockchain.FindUTXO()
+	log.Printf("UTXO %v\n", UTXO)
 	err := db.Update(func(txn *badger.Txn) error {
 		for txId, outs := range UTXO {
 			key, err := hex.DecodeString(txId)
 			bcerror.Handle(err)
 			key = append(utxoPrefix, key...)
+			fmt.Printf("Reindex, key: %v\n", key)
 			err = txn.Set(key, outs.Serialize())
 			bcerror.Handle(err)
 		}
@@ -154,10 +165,15 @@ func (u *UTXOSet) Update(block *Block) {
 	})
 	bcerror.Handle(err)
 }
+
+// Deletes all entries in the database with `prefix`.
 func (u *UTXOSet) DeleteByPrefix(prefix []byte) {
+	// local function to delete keys.
 	deleteKeys := func(keysForDelete [][]byte) error {
+		fmt.Printf("DeleteByPrefix, key: %v\n", keysForDelete)
 		if err := u.Blockchain.Database.Update(func(txn *badger.Txn) error {
 			for _, key := range keysForDelete {
+				fmt.Printf("DeleteByPrefix, key: %v\n", key)
 				if err := txn.Delete(key); err != nil {
 					return err
 				}
@@ -168,7 +184,8 @@ func (u *UTXOSet) DeleteByPrefix(prefix []byte) {
 		}
 		return nil
 	}
-	collectSize := 100000
+
+	collectSize := 100_000
 	u.Blockchain.Database.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false

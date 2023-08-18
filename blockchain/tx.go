@@ -12,13 +12,7 @@ import (
 // Signature Script (from input)
 // Pubkey    Script (from output)
 
-type TxOutput struct {
-	Value      int
-	PubKeyHash []byte // = Pubkey Script in real Bitcoin
-}
-type TxOutputs struct {
-	Outputs []TxOutput
-}
+// transaction input
 type TxInput struct {
 	ID        []byte
 	Out       int
@@ -26,30 +20,46 @@ type TxInput struct {
 	PubKey    []byte
 }
 
-func (in *TxInput) UsesKey(pubKeyHash []byte) bool {
-	lockingHash := wallet.PublicKeyHash(in.PubKey)
-	return bytes.Compare(lockingHash, pubKeyHash) == 0
+// transaction output
+type TxOutput struct {
+	Value      int
+	PubKeyHash []byte // = Pubkey Script in real Bitcoin
 }
-func (out *TxOutput) Lock(address []byte) {
-	pubKeyHash := wallet.Base58Decode(address)
-	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
+
+// transaction outputs
+type TxOutputs struct {
+	Outputs []TxOutput
+}
+
+// Sets PubKeyHash in transaction output.
+func (out *TxOutput) lock(address []byte) {
+	pubKeyHash := wallet.PKHFrom(address)
 	out.PubKeyHash = pubKeyHash
 }
-func (out *TxOutput) IsLockedWithKey(pubKeyHash []byte) bool {
+
+// Returns true if transaction output is locked with pubKeyHash.
+func (out *TxOutput) IsLockedWith(pubKeyHash []byte) bool {
 	return bytes.Compare(out.PubKeyHash, pubKeyHash) == 0
 }
+
+// Creates new transaction output.
+// 'address' will be converted to a public key hash (PKH).
 func NewTXOutput(value int, address string) *TxOutput {
 	txo := &TxOutput{value, nil}
-	txo.Lock([]byte(address))
+	txo.lock([]byte(address))
 	return txo
 }
-func (outs TxOutputs) Serialize() []byte {
+
+// Serialize transaction outputs for storing in DB.
+func (outs *TxOutputs) Serialize() []byte {
 	var buffer bytes.Buffer
 	encode := gob.NewEncoder(&buffer)
-	err := encode.Encode(outs)
+	err := encode.Encode(*outs)
 	bcerror.Handle(err)
 	return buffer.Bytes()
 }
+
+// Deserialize transaction outputs for retrieving from DB.
 func DeserializeOutputs(data []byte) TxOutputs {
 	var outputs TxOutputs
 	decode := gob.NewDecoder(bytes.NewReader(data))
