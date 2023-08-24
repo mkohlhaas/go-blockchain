@@ -39,7 +39,7 @@ func newMerkleNode(left, right *merkleNode, transaction []byte) *merkleNode {
 }
 
 // Creates a new Merkle tree.
-func NewMerkleTree(transactions [][]byte) *merkleTree {
+func newMerkleTree(transactions [][]byte) *merkleTree {
 	var nodes []merkleNode
 	for _, transaction := range transactions {
 		node := newMerkleNode(nil, nil, transaction)
@@ -62,4 +62,10 @@ func NewMerkleTree(transactions [][]byte) *merkleTree {
 	// nodes exists only of one node - the root node
 	tree := merkleTree{&nodes[0]}
 	return &tree
+}
+
+// CalcMerkleHash returns Merkel hash value for all transactions.
+func CalcMerkleHash(transactions [][]byte) []byte {
+	mt := newMerkleTree(transactions)
+	return mt.hash()
 }

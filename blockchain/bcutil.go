@@ -1,3 +1,4 @@
+// Package blockchain provides all necessary functions for dealing with the Bitcoin blockchain.
 package blockchain
 
 import (

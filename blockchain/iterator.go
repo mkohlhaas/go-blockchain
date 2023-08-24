@@ -5,19 +5,17 @@ import (
 	"github.com/mkohlhaas/golang-blockchain/bcerror"
 )
 
-// iterator interface
 type iterator interface {
 	HasNext() bool
 	GetNext() *Block
 }
 
-// Blockchain iterator
-type BlockChainIterator struct {
+type blockChainIterator struct {
 	currentBlock *Block
 	database     *badger.DB
 }
 
-// Creates new iterator from a blockchain.
+// CreateBCIterator creates new iterator from a blockchain.
 func (bc *BlockChain) CreateBCIterator() iterator {
 	var block *Block
 	err := bc.Database.View(func(txn *badger.Txn) error {
@@ -32,19 +30,17 @@ func (bc *BlockChain) CreateBCIterator() iterator {
 		return err
 	})
 	bcerror.Handle(err)
-	return &BlockChainIterator{
+	return &blockChainIterator{
 		currentBlock: block,
 		database:     bc.Database,
 	}
 }
 
-// Returns true if there is another block in the blockchain.
-func (iter *BlockChainIterator) HasNext() bool {
-	return iter.currentBlock.IsNotGenesisBlock()
+func (iter *blockChainIterator) HasNext() bool {
+	return iter.currentBlock.isNotGenesisBlock()
 }
 
-// Returns the next block from the blockchain.
-func (iter *BlockChainIterator) GetNext() *Block {
+func (iter *blockChainIterator) GetNext() *Block {
 	var block *Block
 	err := iter.database.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(iter.currentBlock.PrevHash)

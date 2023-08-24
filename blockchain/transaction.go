@@ -20,6 +20,7 @@ const (
 	noIndex = -1
 )
 
+// Transaction contains transaction inputs and outputs.
 type Transaction struct {
 	ID      []byte
 	Inputs  []TxInput
@@ -32,7 +33,7 @@ func (tx *Transaction) updateTransactionID() {
 	tx.ID = doubleHash256(tx.Serialize())
 }
 
-// Serializes transaction.
+// Serialize transaction.
 func (tx *Transaction) Serialize() []byte {
 	var encoded bytes.Buffer
 	enc := gob.NewEncoder(&encoded)
@@ -43,7 +44,7 @@ func (tx *Transaction) Serialize() []byte {
 	return encoded.Bytes()
 }
 
-// Deserializes transaction.
+// DeserializeTransaction deserializes transaction.
 func DeserializeTransaction(data []byte) Transaction {
 	var transaction Transaction
 	decoder := gob.NewDecoder(bytes.NewReader(data))
@@ -52,8 +53,8 @@ func DeserializeTransaction(data []byte) Transaction {
 	return transaction
 }
 
-// First transcaction in a block is always a coinbase transaction.
-// Mining rewards goes to `to`.
+// CoinbaseTx is the first transcaction in a block.
+// Mining rewards and fees go to `to`.
 // `data` can be any string. Typically used for vanity blocks.
 // `data` is defined as a variadic argument to make it optional.
 func CoinbaseTx(to string, data ...string) *Transaction {
@@ -63,7 +64,7 @@ func CoinbaseTx(to string, data ...string) *Transaction {
 	txin := TxInput{
 		Out:    noIndex,
 		PubKey: []byte(data[0])}
-	txout := NewTXOutput(20, to)
+	txout := newTXOutput(20, to)
 	tx := &Transaction{
 		Inputs:  []TxInput{txin},
 		Outputs: []TxOutput{*txout}}
@@ -79,7 +80,7 @@ func randomString() string {
 	return fmt.Sprintf("%x", randData)
 }
 
-// Returns a new transaction.
+// NewTransaction returns a new transaction.
 // Uses all spendable outputs in blockchain.
 // Left over change will be transferred to oneself.
 func NewTransaction(w *wallet.Wallet, to string, amount int, UTXO *UTXOSet) *Transaction {
@@ -87,7 +88,7 @@ func NewTransaction(w *wallet.Wallet, to string, amount int, UTXO *UTXOSet) *Tra
 	var outputs []TxOutput
 	pubKeyHash := wallet.PublicKeyHash(w.PublicKey)
 	acc, validOutputs := UTXO.FindSpendableOutputs(pubKeyHash, amount)
-  fmt.Printf("Spendable output: %d\n", acc)
+	fmt.Printf("Spendable output: %d\n", acc)
 	if acc < amount {
 		log.Panic("Error: not enough funds")
 	}
@@ -105,33 +106,33 @@ func NewTransaction(w *wallet.Wallet, to string, amount int, UTXO *UTXOSet) *Tra
 		}
 	}
 	from := fmt.Sprintf("%s", w.Address())
-	outputs = append(outputs, *NewTXOutput(amount, to))
+	outputs = append(outputs, *newTXOutput(amount, to))
 	if acc > amount {
 		// Create separate output to oneself (`from`) for change/odd money.
-		outputs = append(outputs, *NewTXOutput(acc-amount, from))
+		outputs = append(outputs, *newTXOutput(acc-amount, from))
 	}
 	tx := &Transaction{
 		Inputs:  inputs,
 		Outputs: outputs}
 	tx.updateTransactionID()
-	UTXO.Blockchain.SignTransaction(tx, w.PrivateKey)
+	UTXO.Blockchain.signTransaction(tx, w.PrivateKey)
 	return tx
 }
 
 // Returns true if transaction is a coinbase transaction.
-func (tx *Transaction) IsCoinbase() bool {
+func (tx *Transaction) isCoinbase() bool {
 	return tx.Inputs[0].Out == noIndex
 }
 
 // Returns true if transaction is NOT a coinbase transaction.
-func (tx *Transaction) IsNotCoinbase() bool {
-	return !tx.IsCoinbase()
+func (tx *Transaction) isNotCoinbase() bool {
+	return !tx.isCoinbase()
 }
 
 // Sign transaction.
 // `prevTXs` is a map: Transaction ID -> transaction.
 func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transaction) {
-	if tx.IsCoinbase() {
+	if tx.isCoinbase() {
 		return // nothing to do for the coinbase transaction
 	}
 	for _, in := range tx.Inputs {
@@ -140,24 +141,24 @@ func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transac
 		}
 	}
 	txCleansed := tx.cleanTransaction()
-	for inId, in := range txCleansed.Inputs {
+	for inID, in := range txCleansed.Inputs {
 		prevTX := prevTXs[hex.EncodeToString(in.ID)]
 		// has already been removed in cleanTransaction()
 		// txCleansed.Inputs[inId].Signature = nil
-		txCleansed.Inputs[inId].PubKey = prevTX.Outputs[in.Out].PubKeyHash
+		txCleansed.Inputs[inID].PubKey = prevTX.Outputs[in.Out].PubKeyHash
 		dataToSign := fmt.Sprintf("%x\n", txCleansed)
 		// Signing uses the entire cleaned transaction!
 		r, s, err := ecdsa.Sign(rand.Reader, &privKey, []byte(dataToSign))
 		bcerror.Handle(err)
 		signature := append(r.Bytes(), s.Bytes()...)
-		tx.Inputs[inId].Signature = signature
-		txCleansed.Inputs[inId].PubKey = nil
+		tx.Inputs[inID].Signature = signature
+		txCleansed.Inputs[inID].PubKey = nil
 	}
 }
 
 // Verifies transaction.
-func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
-	if tx.IsCoinbase() {
+func (tx *Transaction) verify(prevTXs map[string]Transaction) bool {
+	if tx.isCoinbase() {
 		return true // nothing to verify for coinbase transaction
 	}
 	for _, in := range tx.Inputs {
@@ -167,11 +168,11 @@ func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
 	}
 	txCleansed := tx.cleanTransaction()
 	curve := elliptic.P256()
-	for inId, in := range tx.Inputs {
+	for inID, in := range tx.Inputs {
 		prevTx := prevTXs[hex.EncodeToString(in.ID)]
 		// has already been removed in cleanTransaction()
 		// txCleansed.Inputs[inId].Signature = nil
-		txCleansed.Inputs[inId].PubKey = prevTx.Outputs[in.Out].PubKeyHash
+		txCleansed.Inputs[inID].PubKey = prevTx.Outputs[in.Out].PubKeyHash
 		// Verify ecdsa signature.
 		r := big.Int{}
 		s := big.Int{}
@@ -188,7 +189,7 @@ func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
 		if !ecdsa.Verify(&rawPubKey, []byte(dataToVerify), &r, &s) {
 			return false
 		}
-		txCleansed.Inputs[inId].PubKey = nil
+		txCleansed.Inputs[inID].PubKey = nil
 	}
 	return true
 }

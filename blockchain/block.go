@@ -26,6 +26,7 @@ var (
 	target *big.Int
 )
 
+// Block of the blockchain.
 type Block struct {
 	Timestamp    int64
 	Hash         []byte
@@ -43,22 +44,24 @@ func init() {
 
 // Hashes block using Merkle tree.
 // Returns hash of Merkle tree.
-func (b *Block) HashTransactions() []byte {
+func (b *Block) hashTransactions() []byte {
 	var transactions [][]byte
 	for _, tx := range b.Transactions {
 		transactions = append(transactions, tx.Serialize())
 	}
-	tree := NewMerkleTree(transactions)
-	return tree.hash()
+	return CalcMerkleHash(transactions)
 }
 
-// Creates a valid new block with proof of work.
-func CreateBlock(txs []*Transaction, prevHash []byte, height uint64) *Block {
+// Creates a valid new block WITH proof of work.
+func createBlock(txs []*Transaction, prevHash []byte, height uint64) *Block {
 	b := &Block{
 		Timestamp:    time.Now().Unix(),
+		Hash:         []byte{},
 		Transactions: txs,
 		PrevHash:     prevHash,
-		Height:       height}
+		Nonce:        0,
+		Height:       height,
+	}
 	b.RunProof()
 	log.Printf("New Block: %+v\n", b)
 	return b
@@ -67,18 +70,17 @@ func CreateBlock(txs []*Transaction, prevHash []byte, height uint64) *Block {
 // Creates the legenedary Genesis Block with only a coinbase transaction.
 func genesis(coinbase *Transaction) *Block {
 	prevHash := []byte{} // no previous hash
-	var height uint64 = 0
-	return CreateBlock([]*Transaction{coinbase}, prevHash, height)
+	return createBlock([]*Transaction{coinbase}, prevHash, 0)
 }
 
 // Returns true if block is the legendary Genesis block.
-func (b *Block) IsGenesisBlock() bool {
+func (b *Block) isGenesisBlock() bool {
 	return b.Height == 0
 }
 
 // Returns true if block is NOT the legendary Genesis block.
-func (b *Block) IsNotGenesisBlock() bool {
-	return !b.IsGenesisBlock()
+func (b *Block) isNotGenesisBlock() bool {
+	return !b.isGenesisBlock()
 }
 
 // SerializeBlock block for storing in database.
@@ -99,7 +101,8 @@ func DeserializeBlock(data []byte) *Block {
 	return &b
 }
 
-// Runs proof of work.
+// RunProof runs proof of work.
+// Updates nonce and hash in the block.
 func (b *Block) RunProof() {
 	var nonce uint32
 	for nonce < math.MaxUint32 { // we expect to find a nonce
@@ -109,23 +112,23 @@ func (b *Block) RunProof() {
 		}
 		nonce++
 	}
+	b.calculateBlockHash()
 }
 
+// IsValidBlockHeader returns true if we have a valid block header.
 // Validates proof of work.
-// Returns true if we have a valid block header.
 func (b *Block) IsValidBlockHeader() bool {
-	b.calculateBlockHash()
 	var intHash big.Int
 	intHash.SetBytes(b.Hash)
 	return intHash.Cmp(target) == -1
 }
 
-// Returns sha256 of block header.
+// Sets block hash to double sha256 of block header.
 func (b *Block) calculateBlockHash() {
 	data := [][]byte{
 		[]byte(strconv.FormatInt(b.Timestamp, 10)),
 		b.PrevHash,
-		b.HashTransactions(),
+		b.hashTransactions(),
 		toHex(int64(b.Nonce)),
 		toHex(int64(Difficulty)),
 	}
@@ -160,7 +163,7 @@ func (b *Block) String() string {
 	lines = append(lines, fmt.Sprintf("Nonce: %d", b.Nonce))
 	lines = append(lines, fmt.Sprintf("Height: %d", b.Height))
 	for i, tx := range b.Transactions {
-    lines= append(lines, fmt.Sprintf("%d: %s", i, tx))
-  }
+		lines = append(lines, fmt.Sprintf("%d: %s", i, tx))
+	}
 	return strings.Join(lines, "\n")
 }

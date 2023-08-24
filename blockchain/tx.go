@@ -12,7 +12,7 @@ import (
 // Signature Script (from input)
 // Pubkey    Script (from output)
 
-// transaction input
+// TxInput is the transaction input.
 type TxInput struct {
 	ID        []byte
 	Out       int
@@ -20,13 +20,13 @@ type TxInput struct {
 	PubKey    []byte
 }
 
-// transaction output
+// TxOutput is the transaction output.
 type TxOutput struct {
 	Value      int
 	PubKeyHash []byte // = Pubkey Script in real Bitcoin
 }
 
-// transaction outputs
+// TxOutputs is a list of transaction outputs.
 type TxOutputs struct {
 	Outputs []TxOutput
 }
@@ -37,14 +37,14 @@ func (out *TxOutput) lock(address []byte) {
 	out.PubKeyHash = pubKeyHash
 }
 
-// Returns true if transaction output is locked with pubKeyHash.
+// IsLockedWith returns true if transaction output is locked with pubKeyHash.
 func (out *TxOutput) IsLockedWith(pubKeyHash []byte) bool {
 	return bytes.Compare(out.PubKeyHash, pubKeyHash) == 0
 }
 
 // Creates new transaction output.
 // 'address' will be converted to a public key hash (PKH).
-func NewTXOutput(value int, address string) *TxOutput {
+func newTXOutput(value int, address string) *TxOutput {
 	txo := &TxOutput{value, nil}
 	txo.lock([]byte(address))
 	return txo
@@ -60,7 +60,7 @@ func (outs *TxOutputs) Serialize() []byte {
 }
 
 // Deserialize transaction outputs for retrieving from DB.
-func DeserializeOutputs(data []byte) TxOutputs {
+func deserializeOutputs(data []byte) TxOutputs {
 	var outputs TxOutputs
 	decode := gob.NewDecoder(bytes.NewReader(data))
 	err := decode.Decode(&outputs)

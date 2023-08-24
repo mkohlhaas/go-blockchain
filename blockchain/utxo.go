@@ -23,7 +23,7 @@ type UTXOSet struct {
 	Blockchain *BlockChain
 }
 
-// Returns accumulated amount and a map: Transaction ID -> List of Indexes in Transaction.
+// FindSpendableOutputs returns accumulated amount and a map: Transaction ID -> List of Indexes in Transaction.
 func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[string][]int) {
 	unspentOuts := make(map[string][]int)
 	accumulated := 0
@@ -43,7 +43,7 @@ func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[s
 			bcerror.Handle(err)
 			k = bytes.TrimPrefix(k, utxoPrefix)
 			txID := hex.EncodeToString(k)
-			outs := DeserializeOutputs(v)
+			outs := deserializeOutputs(v)
 			for outIdx, out := range outs.Outputs {
 				if out.IsLockedWith(pubKeyHash) && accumulated < amount {
 					accumulated += out.Value
@@ -56,6 +56,8 @@ func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[s
 	bcerror.Handle(err)
 	return accumulated, unspentOuts
 }
+
+// FindUnspentTransactions returnds all unused transactions.
 func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) []TxOutput {
 	var UTXOs []TxOutput
 	db := u.Blockchain.Database
@@ -71,7 +73,7 @@ func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) []TxOutput {
 				return nil
 			})
 			bcerror.Handle(err)
-			outs := DeserializeOutputs(v)
+			outs := deserializeOutputs(v)
 			for _, out := range outs.Outputs {
 				if out.IsLockedWith(pubKeyHash) {
 					UTXOs = append(UTXOs, out)
@@ -83,6 +85,8 @@ func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) []TxOutput {
 	bcerror.Handle(err)
 	return UTXOs
 }
+
+// CountTransactions returns number of transaction in UTXO set.
 func (u UTXOSet) CountTransactions() int {
 	db := u.Blockchain.Database
 	counter := 0
@@ -99,16 +103,16 @@ func (u UTXOSet) CountTransactions() int {
 	return counter
 }
 
-// Rebuilds the index of unspent transaction outputs.
+// Reindex rebuilds the index of unspent transaction outputs.
 func (u UTXOSet) Reindex() {
 	db := u.Blockchain.Database
-	u.DeleteByPrefix(utxoPrefix)
+	u.deleteByPrefix(utxoPrefix)
 	log.Printf("Before UTXO\n")
-	UTXO := u.Blockchain.FindUTXO()
+	UTXO := u.Blockchain.findUTXO()
 	log.Printf("UTXO %v\n", UTXO)
 	err := db.Update(func(txn *badger.Txn) error {
-		for txId, outs := range UTXO {
-			key, err := hex.DecodeString(txId)
+		for txID, outs := range UTXO {
+			key, err := hex.DecodeString(txID)
 			bcerror.Handle(err)
 			key = append(utxoPrefix, key...)
 			fmt.Printf("Reindex, key: %v\n", key)
@@ -119,11 +123,13 @@ func (u UTXOSet) Reindex() {
 	})
 	bcerror.Handle(err)
 }
+
+// Update ... (TODO)
 func (u *UTXOSet) Update(block *Block) {
 	db := u.Blockchain.Database
 	err := db.Update(func(txn *badger.Txn) error {
 		for _, tx := range block.Transactions {
-			if tx.IsCoinbase() == false {
+			if tx.isCoinbase() == false {
 				for _, in := range tx.Inputs {
 					updatedOuts := TxOutputs{}
 					inID := append(utxoPrefix, in.ID...)
@@ -135,7 +141,7 @@ func (u *UTXOSet) Update(block *Block) {
 						return nil
 					})
 					bcerror.Handle(err)
-					outs := DeserializeOutputs(v)
+					outs := deserializeOutputs(v)
 					for outIdx, out := range outs.Outputs {
 						if outIdx != in.Out {
 							updatedOuts.Outputs = append(updatedOuts.Outputs, out)
@@ -167,11 +173,11 @@ func (u *UTXOSet) Update(block *Block) {
 }
 
 // Deletes all entries in the database with `prefix`.
-func (u *UTXOSet) DeleteByPrefix(prefix []byte) {
+func (u *UTXOSet) deleteByPrefix(prefix []byte) {
 	// local function to delete keys.
 	deleteKeys := func(keysForDelete [][]byte) error {
 		fmt.Printf("DeleteByPrefix, key: %v\n", keysForDelete)
-		if err := u.Blockchain.Database.Update(func(txn *badger.Txn) error {
+		err := u.Blockchain.Database.Update(func(txn *badger.Txn) error {
 			for _, key := range keysForDelete {
 				fmt.Printf("DeleteByPrefix, key: %v\n", key)
 				if err := txn.Delete(key); err != nil {
@@ -179,10 +185,8 @@ func (u *UTXOSet) DeleteByPrefix(prefix []byte) {
 				}
 			}
 			return nil
-		}); err != nil {
-			return err
-		}
-		return nil
+		})
+		return err
 	}
 
 	collectSize := 100_000

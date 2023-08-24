@@ -2,8 +2,9 @@ package blockchain
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TODO: Just use already tested cases from other Bitcoin projects.
@@ -38,6 +39,6 @@ func TestNewMerkleNode(t *testing.T) {
 	//level 4
 	mn15 := newMerkleNode(mn13, mn14, nil)
 	root := fmt.Sprintf("%x", mn15.data)
-	tree := NewMerkleTree(data)
+	tree := newMerkleTree(data)
 	assert.Equal(t, root, fmt.Sprintf("%x", tree.hash()), "Merkle node root has is equal")
 }
