@@ -5,6 +5,8 @@ import (
 	"log"
 )
 
+type serializedTransaction []byte
+
 // Merkle tree.
 type merkleTree struct {
 	rootNode *merkleNode
@@ -23,7 +25,7 @@ func (t *merkleTree) hash() []byte {
 }
 
 // Creates a new merkle node given its left and right branch.
-func newMerkleNode(left, right *merkleNode, transaction []byte) *merkleNode {
+func newMerkleNode(left, right *merkleNode, transaction serializedTransaction) *merkleNode {
 	node := merkleNode{}
 	if left == nil && right == nil {
 		hash := sha256.Sum256(transaction)
@@ -39,7 +41,7 @@ func newMerkleNode(left, right *merkleNode, transaction []byte) *merkleNode {
 }
 
 // Creates a new Merkle tree.
-func newMerkleTree(transactions [][]byte) *merkleTree {
+func newMerkleTree(transactions []serializedTransaction) *merkleTree {
 	var nodes []merkleNode
 	for _, transaction := range transactions {
 		node := newMerkleNode(nil, nil, transaction)
@@ -65,7 +67,7 @@ func newMerkleTree(transactions [][]byte) *merkleTree {
 }
 
 // CalcMerkleHash returns Merkel hash value for all transactions.
-func CalcMerkleHash(transactions [][]byte) []byte {
+func CalcMerkleHash(transactions []serializedTransaction) Hash {
 	mt := newMerkleTree(transactions)
 	return mt.hash()
 }

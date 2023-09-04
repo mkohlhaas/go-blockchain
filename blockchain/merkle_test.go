@@ -10,7 +10,7 @@ import (
 // TODO: Just use already tested cases from other Bitcoin projects.
 // This test is really crappy.
 func TestNewMerkleNode(t *testing.T) {
-	data := [][]byte{
+	data := []serializedTransaction{
 		[]byte("node1"),
 		[]byte("node2"),
 		[]byte("node3"),

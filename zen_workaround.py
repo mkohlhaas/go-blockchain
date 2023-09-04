@@ -77,7 +77,7 @@ if not args.check:
         try:
           os.write(msr, struct.pack('<q', val))
         except PermissionError:
-            check = is_secure_boot_enabled() 
+            check = is_secure_boot_enabled()
             if check == SecureBoot.enabled:
                 print("Permission denied writing to MSR. Secure Boot is enabled, which causes this error. Try disabling Secure Boot")
             elif check == SecureBoot.disabled:

@@ -4,18 +4,17 @@ import (
 	"bytes"
 	"encoding/gob"
 
-	"github.com/mkohlhaas/golang-blockchain/bcerror"
-	"github.com/mkohlhaas/golang-blockchain/wallet"
+	"github.com/mkohlhaas/gobc/bcerror"
 )
 
 // Script stack (input on top of output):
-// Signature Script (from input)
-// Pubkey    Script (from output)
+// Signature   Script (from input)
+// PubkeyHash  Script (from output)
 
 // TxInput is the transaction input.
 type TxInput struct {
-	ID        []byte
-	Out       int
+	ID        []byte // transaction ID of the TxOutput this TxInput comes from
+	Out       int    // index of the TxOutput in the transaction where this TxInput comes from
 	Signature []byte // = Signature Script in real Bitcoin
 	PubKey    []byte
 }
@@ -23,7 +22,7 @@ type TxInput struct {
 // TxOutput is the transaction output.
 type TxOutput struct {
 	Value      int
-	PubKeyHash []byte // = Pubkey Script in real Bitcoin
+	PubKeyHash Hash // = Pubkey Script in real Bitcoin
 }
 
 // TxOutputs is a list of transaction outputs.
@@ -33,12 +32,12 @@ type TxOutputs struct {
 
 // Sets PubKeyHash in transaction output.
 func (out *TxOutput) lock(address []byte) {
-	pubKeyHash := wallet.PKHFrom(address)
+	pubKeyHash := PKHFrom(address)
 	out.PubKeyHash = pubKeyHash
 }
 
 // IsLockedWith returns true if transaction output is locked with pubKeyHash.
-func (out *TxOutput) IsLockedWith(pubKeyHash []byte) bool {
+func (out *TxOutput) IsLockedWith(pubKeyHash Hash) bool {
 	return bytes.Compare(out.PubKeyHash, pubKeyHash) == 0
 }
 

@@ -1,5 +1,7 @@
 ## Golang Blockchain
 
+- This project need Golang version 1.18.x. There was a change in newer releases that cause problems in the GOB encoder.
+
 #### [Tensor Programming](https://steemit.com/@tensor)
 
 - [YouTube: Go Blockchain](https://www.youtube.com/playlist?list=PLJbE2Yu2zumC5QE39TQHBLYJDB2gfFE5Q)

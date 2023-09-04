@@ -15,8 +15,8 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/mkohlhaas/golang-blockchain/bcerror"
-	"github.com/mkohlhaas/golang-blockchain/blockchain"
+	"github.com/mkohlhaas/gobc/bcerror"
+	"github.com/mkohlhaas/gobc/blockchain"
 	"github.com/vrecan/death/v3"
 )
 
@@ -26,11 +26,10 @@ const (
 )
 
 var (
-	nodeAddress string
-	mineAddress string
-	KnownNodes  = []string{"localhost:3000"} // TODO: replace slice with map (makes insertion and deletion easier)
-	// KnownNodes      = map[string]bool{"localhost:3000": true}
-	blocksInTransit = [][]byte{}                              // track downloaded block hashes
+	nodeAddress     string
+	mineAddress     string
+	KnownNodes      = []string{"localhost:3000"}              // TODO: replace slice with map (makes insertion and deletion easier); KnownNodes      = map[string]bool{"localhost:3000": true}
+	blocksInTransit = make([]blockchain.Hash, 0)              // track downloaded block hashes
 	memoryPool      = make(map[string]blockchain.Transaction) // map: transaction id -> transaction
 )
 
@@ -60,9 +59,9 @@ type getData struct {
 // For sending/receiving inventary. Can be either blocks or transactions.
 // Show me
 type inv struct {
-	addrFrom string   // sender
-	kind     string   // "block" or "tx"
-	items    [][]byte // blocks or transactions
+	addrFrom string            // sender
+	kind     string            // "block" or "tx"
+	items    []blockchain.Hash // blocks or transactions
 }
 
 // For sending/receiving transactions.
@@ -139,7 +138,7 @@ func sendAddr(address string) {
 
 // We have new blocks or transaction for our peer.
 // Send our peer those hashes.
-func sendInv(address, kind string, items [][]byte) {
+func sendInv(address, kind string, items []blockchain.Hash) {
 	inventory := inv{nodeAddress, kind, items}
 	payload := encode(inventory)
 	request := append(cmdToBytes("inv"), payload...)
@@ -163,7 +162,7 @@ func sendGetData(address, kind string, id []byte) {
 
 // Sends the whole block to our peer.
 func sendBlock(addr string, b *blockchain.Block) {
-	data := block{nodeAddress, b.SerializeBlock()}
+	data := block{nodeAddress, b.Serialize()}
 	payload := encode(data)
 	request := append(cmdToBytes("block"), payload...)
 	sendData(addr, request)
@@ -280,7 +279,7 @@ func HandleInv(request []byte, chain *blockchain.BlockChain) {
 		blockHash := payload.items[0]
 		sendGetData(payload.addrFrom, "block", blockHash)
 		// Removes first block from blocksInTransit.
-		newInTransit := [][]byte{}
+		newInTransit := make([]blockchain.Hash, 0)
 		for _, b := range blocksInTransit {
 			if bytes.Compare(b, blockHash) != 0 {
 				newInTransit = append(newInTransit, b)
@@ -313,13 +312,14 @@ func HandleGetData(request []byte, chain *blockchain.BlockChain) {
 	decode(request, &payload)
 	fmt.Printf("HandleGetData: %+v.\n", payload)
 	if payload.kind == "block" {
-		block := chain.GetBlock([]byte(payload.id))
-		if block == nil {
+		block, err := chain.GetBlock([]byte(payload.id))
+		if err != nil {
+			fmt.Printf("%s", err)
 			return
 		}
 		sendBlock(payload.addrFrom, block)
 	}
-	// Transaction must be in the memory pool. (Strange!)
+	// Transaction must be in the memory pool. (TODO: Strange!)
 	if payload.kind == "tx" {
 		txID := hex.EncodeToString(payload.id)
 		tx := memoryPool[txID]
@@ -340,7 +340,7 @@ func HandleTx(request []byte, chain *blockchain.BlockChain) {
 	if nodeAddress == KnownNodes[0] {
 		for _, node := range KnownNodes {
 			if node != nodeAddress && node != payload.addrFrom {
-				sendInv(node, "tx", [][]byte{tx.ID})
+				sendInv(node, "tx", []blockchain.Hash{tx.ID})
 			}
 		}
 	} else {
@@ -421,11 +421,11 @@ func MineTx(chain *blockchain.BlockChain) {
 	// Tell our peers we have a new block.
 	for _, node := range KnownNodes {
 		if node != nodeAddress {
-			sendInv(node, "block", [][]byte{newBlock.Hash})
+			sendInv(node, "block", []blockchain.Hash{newBlock.Hash})
 		}
 	}
 	// Mine again in case we are not finished.
-  // Transactions come in via HandleTx() which calls MineTx(). Problematic.
+	// Transactions come in via HandleTx() which calls MineTx(). Problematic.
 	if len(memoryPool) > 0 {
 		MineTx(chain)
 	}

@@ -12,8 +12,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/mkohlhaas/golang-blockchain/bcerror"
-	"github.com/mkohlhaas/golang-blockchain/wallet"
+	"github.com/mkohlhaas/gobc/bcerror"
 )
 
 const (
@@ -22,15 +21,18 @@ const (
 
 // Transaction contains transaction inputs and outputs.
 type Transaction struct {
-	ID      []byte
+	ID      Hash
 	Inputs  []TxInput
 	Outputs []TxOutput
 }
 
 // Updates Transaction ID.
-func (tx *Transaction) updateTransactionID() {
-	tx.ID = []byte{} // reset transaction ID
-	tx.ID = doubleHash256(tx.Serialize())
+func (tx *Transaction) calcTransactionID() []byte {
+	oldTX_ID := tx.ID
+	tx.ID = make([]byte, 0) // reset transaction ID before calculating the Double SHA256 hash!
+	dh := doubleHash256(tx.Serialize())
+	tx.ID = oldTX_ID
+	return dh
 }
 
 // Serialize transaction.
@@ -38,9 +40,7 @@ func (tx *Transaction) Serialize() []byte {
 	var encoded bytes.Buffer
 	enc := gob.NewEncoder(&encoded)
 	err := enc.Encode(tx)
-	if err != nil {
-		log.Panic(err)
-	}
+	bcerror.Handle(err)
 	return encoded.Bytes()
 }
 
@@ -58,7 +58,7 @@ func DeserializeTransaction(data []byte) Transaction {
 // `data` can be any string. Typically used for vanity blocks.
 // `data` is defined as a variadic argument to make it optional.
 func CoinbaseTx(to string, data ...string) *Transaction {
-	if data[0] == "" {
+	if len(data) == 0 {
 		data[0] = randomString()
 	}
 	txin := TxInput{
@@ -68,7 +68,7 @@ func CoinbaseTx(to string, data ...string) *Transaction {
 	tx := &Transaction{
 		Inputs:  []TxInput{txin},
 		Outputs: []TxOutput{*txout}}
-	tx.updateTransactionID()
+	tx.ID = tx.calcTransactionID()
 	return tx
 }
 
@@ -80,13 +80,12 @@ func randomString() string {
 	return fmt.Sprintf("%x", randData)
 }
 
-// NewTransaction returns a new transaction.
-// Uses all spendable outputs in blockchain.
-// Left over change will be transferred to oneself.
-func NewTransaction(w *wallet.Wallet, to string, amount int, UTXO *UTXOSet) *Transaction {
+// NewTransaction returns a transaction which uses all spendable outputs.
+// Left over/change will be transferred to payer.
+func NewTransaction(w *Wallet, to string, amount int, UTXO *UTXOSet) *Transaction {
 	var inputs []TxInput
 	var outputs []TxOutput
-	pubKeyHash := wallet.PublicKeyHash(w.PublicKey)
+	pubKeyHash := PublicKeyHash(w.PublicKey)
 	acc, validOutputs := UTXO.FindSpendableOutputs(pubKeyHash, amount)
 	fmt.Printf("Spendable output: %d\n", acc)
 	if acc < amount {
@@ -114,7 +113,7 @@ func NewTransaction(w *wallet.Wallet, to string, amount int, UTXO *UTXOSet) *Tra
 	tx := &Transaction{
 		Inputs:  inputs,
 		Outputs: outputs}
-	tx.updateTransactionID()
+	tx.ID = tx.calcTransactionID()
 	UTXO.Blockchain.signTransaction(tx, w.PrivateKey)
 	return tx
 }
@@ -211,21 +210,20 @@ func (tx *Transaction) cleanTransaction() Transaction {
 	return Transaction{tx.ID, inputs, outputs}
 }
 
-// Stringer interface for transaction.
 func (tx *Transaction) String() string {
-	var lines []string
-	lines = append(lines, fmt.Sprintf("Transaction %x:", tx.ID))
+	var b strings.Builder
+	fmt.Fprintf(&b, "Transaction %x:\n", tx.ID)
 	for i, input := range tx.Inputs {
-		lines = append(lines, fmt.Sprintf("     Input %d:", i))
-		lines = append(lines, fmt.Sprintf("       TXID:     %x", input.ID))
-		lines = append(lines, fmt.Sprintf("       Out:       %d", input.Out))
-		lines = append(lines, fmt.Sprintf("       Signature: %x", input.Signature))
-		lines = append(lines, fmt.Sprintf("       PubKey:    %x", input.PubKey))
+		fmt.Fprintf(&b, "     Input %d:\n", i)
+		fmt.Fprintf(&b, "       TXID:      %x\n", input.ID)
+		fmt.Fprintf(&b, "       Out:       %d\n", input.Out)
+		fmt.Fprintf(&b, "       Signature: %x\n", input.Signature)
+		fmt.Fprintf(&b, "       PubKey:    %x\n", input.PubKey)
 	}
 	for i, output := range tx.Outputs {
-		lines = append(lines, fmt.Sprintf("     Output %d:", i))
-		lines = append(lines, fmt.Sprintf("       Value:  %d", output.Value))
-		lines = append(lines, fmt.Sprintf("       Script: %x", output.PubKeyHash))
+		fmt.Fprintf(&b, "     Output %d:\n", i)
+		fmt.Fprintf(&b, "       Value:  %d\n", output.Value)
+		fmt.Fprintf(&b, "       Script: %x\n", output.PubKeyHash)
 	}
-	return strings.Join(lines, "\n")
+	return b.String()
 }

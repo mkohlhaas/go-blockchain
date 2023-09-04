@@ -3,7 +3,6 @@ package blockchain
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/gob"
 	"fmt"
 	"log"
@@ -13,63 +12,59 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mkohlhaas/golang-blockchain/bcerror"
+	"github.com/duke-git/lancet/v2/slice"
+	"github.com/mkohlhaas/gobc/bcerror"
 )
 
-// Proof of work difficulty.
-const (
-	Difficulty = 12
-)
+// Difficulty is the proof of work difficulty.
+const Difficulty = 12
 
 // Target value for proof of work.
-var (
-	target *big.Int
-)
+var target *big.Int
 
 // Block of the blockchain.
 type Block struct {
 	Timestamp    int64
-	Hash         []byte
+	Hash         Hash
 	Transactions []*Transaction
-	PrevHash     []byte
+	PrevHash     Hash
 	Nonce        uint32
 	Height       uint64
 }
 
+// init updates the requirement target for proof of work.
 func init() {
-	// Updates the requirement target for proof of work.
 	target = big.NewInt(1)
 	target.Lsh(target, uint(256-Difficulty))
 }
 
-// Hashes block using Merkle tree.
-// Returns hash of Merkle tree.
-func (b *Block) hashTransactions() []byte {
-	var transactions [][]byte
+// Returns hash of Merkle tree for block's transactions.
+func (b *Block) hashTransactions() Hash {
+	var transactions []serializedTransaction
 	for _, tx := range b.Transactions {
 		transactions = append(transactions, tx.Serialize())
 	}
 	return CalcMerkleHash(transactions)
 }
 
-// Creates a valid new block WITH proof of work.
-func createBlock(txs []*Transaction, prevHash []byte, height uint64) *Block {
+// Creates a valid new block.
+func createBlock(txs []*Transaction, prevHash Hash, height uint64) *Block {
 	b := &Block{
 		Timestamp:    time.Now().Unix(),
-		Hash:         []byte{},
+		Hash:         make(Hash, 0),
 		Transactions: txs,
 		PrevHash:     prevHash,
 		Nonce:        0,
 		Height:       height,
 	}
 	b.RunProof()
-	log.Printf("New Block: %+v\n", b)
+	log.Printf("New Block: %s\n", b)
 	return b
 }
 
-// Creates the legenedary Genesis Block with only a coinbase transaction.
+// Creates the legendary Genesis Block with only a coinbase transaction.
 func genesis(coinbase *Transaction) *Block {
-	prevHash := []byte{} // no previous hash
+	prevHash := make(Hash, 0) // no previous hash
 	return createBlock([]*Transaction{coinbase}, prevHash, 0)
 }
 
@@ -83,8 +78,8 @@ func (b *Block) isNotGenesisBlock() bool {
 	return !b.isGenesisBlock()
 }
 
-// SerializeBlock block for storing in database.
-func (b *Block) SerializeBlock() []byte {
+// Serialize block for storing in database.
+func (b *Block) Serialize() []byte {
 	var res bytes.Buffer
 	encoder := gob.NewEncoder(&res)
 	err := encoder.Encode(b)
@@ -105,65 +100,59 @@ func DeserializeBlock(data []byte) *Block {
 // Updates nonce and hash in the block.
 func (b *Block) RunProof() {
 	var nonce uint32
-	for nonce < math.MaxUint32 { // we expect to find a nonce
-		b.Nonce = nonce
+	for nonce < math.MaxUint32 { // we expect to find a nonce (if not it takes too long anyways)
 		if b.IsValidBlockHeader() {
 			break // we found a nonce
 		}
 		nonce++
 	}
-	b.calculateBlockHash()
+	b.Nonce = nonce
+	b.Hash = b.calcHash()
 }
 
 // IsValidBlockHeader returns true if we have a valid block header.
 // Validates proof of work.
 func (b *Block) IsValidBlockHeader() bool {
+	hash := b.calcHash()
 	var intHash big.Int
-	intHash.SetBytes(b.Hash)
-	return intHash.Cmp(target) == -1
+	intHash.SetBytes(hash)
+	return intHash.Cmp(target) == -1 // block's hash < target
 }
 
-// Sets block hash to double sha256 of block header.
-func (b *Block) calculateBlockHash() {
-	data := [][]byte{
+// Sets block hash to Double SHA256 of block header.
+func (b *Block) calcHash() Hash {
+	data := slice.Concat(
 		[]byte(strconv.FormatInt(b.Timestamp, 10)),
 		b.PrevHash,
 		b.hashTransactions(),
 		toHex(int64(b.Nonce)),
-		toHex(int64(Difficulty)),
-	}
-	sep := []byte{}
-	bh := bytes.Join(data, sep)
-	b.Hash = doubleHash256(bh)
+		toHex(int64(Difficulty))) // Difficulty is part of the hash!!!
+	return doubleHash256(data)
 }
 
-// Convert int64 to hexadecimal.
-func toHex(num int64) []byte {
-	buff := new(bytes.Buffer)
-	err := binary.Write(buff, binary.BigEndian, num)
-	if err != nil {
-		log.Panic(err)
+// Stringer for blocks.
+func (b *Block) String() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Timestamp: %d\n", b.Timestamp)
+	fmt.Fprintf(&sb, "Hash: %s\n", b.Hash)
+	fmt.Fprintf(&sb, "PrevHash: %s\n", b.PrevHash)
+	fmt.Fprintf(&sb, "Nonce: %d\n", b.Nonce)
+	fmt.Fprintf(&sb, "Height: %d\n", b.Height)
+	fmt.Fprintf(&sb, "Transactions:\n")
+	for i, tx := range b.Transactions {
+		fmt.Fprintf(&sb, "  %d: %s\n", i, tx)
 	}
-	return buff.Bytes()
+	return sb.String()
 }
 
-// Returns double sha256 hash.
-func doubleHash256(data []byte) []byte {
+// Returns Double SHA256 hash.
+func doubleHash256(data []byte) Hash {
 	hash := sha256.Sum256(data)
 	hash1 := sha256.Sum256(hash[:])
 	return hash1[:]
 }
 
-// Stringer for blocks.
-func (b *Block) String() string {
-	var lines []string
-	lines = append(lines, fmt.Sprintf("Timestamp: %d", b.Timestamp))
-	lines = append(lines, fmt.Sprintf("Hash: %s", b.Hash))
-	lines = append(lines, fmt.Sprintf("PrevHash: %s", b.PrevHash))
-	lines = append(lines, fmt.Sprintf("Nonce: %d", b.Nonce))
-	lines = append(lines, fmt.Sprintf("Height: %d", b.Height))
-	for i, tx := range b.Transactions {
-		lines = append(lines, fmt.Sprintf("%d: %s", i, tx))
-	}
-	return strings.Join(lines, "\n")
+// Convert int64 to hexadecimal.
+func toHex(num int64) []byte {
+	return []byte(strconv.FormatInt(num, 16))
 }

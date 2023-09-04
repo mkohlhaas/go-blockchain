@@ -8,7 +8,7 @@ import (
 
 	"github.com/dgraph-io/badger"
 
-	"github.com/mkohlhaas/golang-blockchain/bcerror"
+	"github.com/mkohlhaas/gobc/bcerror"
 )
 
 var (
@@ -24,7 +24,7 @@ type UTXOSet struct {
 }
 
 // FindSpendableOutputs returns accumulated amount and a map: Transaction ID -> List of Indexes in Transaction.
-func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[string][]int) {
+func (u UTXOSet) FindSpendableOutputs(pubKeyHash Hash, amount int) (int, map[string][]int) {
 	unspentOuts := make(map[string][]int)
 	accumulated := 0
 	db := u.Blockchain.Database
@@ -58,7 +58,7 @@ func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[s
 }
 
 // FindUnspentTransactions returnds all unused transactions.
-func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) []TxOutput {
+func (u UTXOSet) FindUnspentTransactions(pubKeyHash Hash) []TxOutput {
 	var UTXOs []TxOutput
 	db := u.Blockchain.Database
 	err := db.View(func(txn *badger.Txn) error {
